@@ -18,10 +18,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Проверяем сохраненную сессию
-    const savedUser = authService.getCurrentUser();
-    setUser(savedUser);
-    setIsLoading(false);
+    // Check for existing session and set up auth state listener
+    const initializeAuth = async () => {
+      try {
+        const currentUser = await authService.getCurrentUser();
+        setUser(currentUser);
+      } catch (error) {
+        console.error('Error initializing auth:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    initializeAuth();
+
+    // Listen for auth state changes
+    const { data: { subscription } } = authService.onAuthStateChange((newUser) => {
+      setUser(newUser);
+      setIsLoading(false);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   const login = async (email: string, password: string) => {
@@ -29,8 +48,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const loggedInUser = await authService.login(email, password);
       setUser(loggedInUser);
-    } finally {
+    } catch (error) {
       setIsLoading(false);
+      throw error;
     }
   };
 
@@ -39,8 +59,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const newUser = await authService.register(email, password, firstName, lastName);
       setUser(newUser);
-    } finally {
+    } catch (error) {
       setIsLoading(false);
+      throw error;
     }
   };
 
@@ -49,16 +70,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await authService.logout();
       setUser(null);
+    } catch (error) {
+      console.error('Logout error:', error);
     } finally {
       setIsLoading(false);
     }
   };
 
   const updateProfile = async (updates: Partial<User>) => {
-    if (!user) return;
+    if (!user) throw new Error('Пользователь не авторизован');
     
-    const updatedUser = await authService.updateProfile(updates);
-    setUser(updatedUser);
+    try {
+      const updatedUser = await authService.updateProfile(updates);
+      setUser(updatedUser);
+    } catch (error) {
+      throw error;
+    }
   };
 
   return (
